@@ -15,7 +15,7 @@ def run_once():
     print(f"[ARI] start calc at {ari_time}")
 
     # 获取传感器数据
-    sensor_data = fetch_sensor_data(ari_time)
+    sensor_data = fetch_sensor_data()
     if not sensor_data:
         print("[ARI] no data fetched, skip")
         return
