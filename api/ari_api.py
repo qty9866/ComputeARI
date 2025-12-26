@@ -1,22 +1,30 @@
+# api/ari_api.py
 from flask import Blueprint, jsonify, request
-from fetch_data import fetch_data
+from fetch_data import fetch_sensor_data
 from compute_ari import compute_all_ari
 
-ari_bp = Blueprint('ari', __name__, url_prefix='/api')
+ari_bp = Blueprint("ari", __name__)  # ❗不带 /api
 
 
-@ari_bp.route('/ari', methods=['GET'])
+@ari_bp.route("/ari", methods=["GET"])
 def get_ari():
-    """
-    获取最新 ARI 结果
-    可选参数：
-        device_id: 指定设备 id
-    """
+    print("[API] /ari called")
 
-    device_id = request.args.get('device_id')
+    device_id = request.args.get("device_id")
+    print(f"[API] device_id = {device_id}")
 
-    # 1️⃣ 取数（以设备最新时间为锚点）
-    sensor_data = fetch_data()
+    # 1️⃣ 取数
+    try:
+        sensor_data = fetch_sensor_data()
+        print(f"[API] fetched {len(sensor_data)} devices")
+    except Exception as e:
+        print("[API] fetch_sensor_data ERROR:", repr(e))
+        return jsonify({
+            "success": False,
+            "msg": "fetch_sensor_data failed",
+            "error": str(e)
+        }), 500
+
     if not sensor_data:
         return jsonify({
             "success": False,
@@ -25,7 +33,16 @@ def get_ari():
         }), 200
 
     # 2️⃣ 计算 ARI
-    ari_results = compute_all_ari(sensor_data)
+    try:
+        ari_results = compute_all_ari(sensor_data)
+        print("[API] compute_ari finished")
+    except Exception as e:
+        print("[API] compute_ari ERROR:", repr(e))
+        return jsonify({
+            "success": False,
+            "msg": "compute_ari failed",
+            "error": str(e)
+        }), 500
 
     # 3️⃣ 设备过滤
     if device_id:
