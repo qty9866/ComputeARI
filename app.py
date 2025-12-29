@@ -15,5 +15,4 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    # 启动 Flask API 服务，默认端口 5000，可根据需要修改
     app.run(host='0.0.0.0', port=8000, debug=True)
