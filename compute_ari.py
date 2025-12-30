@@ -1,4 +1,3 @@
-# compute_ari.py
 from typing import Dict, Any
 import math
 
@@ -25,9 +24,6 @@ def clamp_ari(v):
 
 
 def ari_level_from_value(ari):
-    """
-    二维 ARI 分级（单模型）
-    """
     if ari is None:
         return "无"
     if ari >= 1.0:
@@ -47,41 +43,35 @@ def ari_level_from_value(ari):
 def compute_ari_for_device(data: Dict[str, Any]) -> Dict[str, Any]:
     missing = set(data.get("missing_fields", []))
 
-    # -------------------------
-    # 基础变量（fetch_data 已统一单位）
-    # -------------------------
-    snow_depth = safe_float(data.get("snow_depth"))          # m
-    snowfall_24h = safe_float(data.get("snowfall_24h"))      # m
-    snowfall_72h = safe_float(data.get("snowfall_72h"))      # m
-    delta_snow_24h = safe_float(data.get("delta_snow_24h"))  # m
+    # ---------- 基础变量 ----------
+    snow_depth = safe_float(data.get("snow_depth"))            # m
+    snowfall_24h = safe_float(data.get("snowfall_24h"))        # m
+    snowfall_72h = safe_float(data.get("snowfall_72h"))        # m
+    delta_snow_24h = safe_float(data.get("delta_snow_24h"))    # m（减少为负）
 
-    temp_avg_24h = safe_float(data.get("temp_avg_24h"))      # ℃
-    rainfall_24h = safe_float(data.get("rainfall_24h"))      # mm
-    wind_speed = safe_float(data.get("wind_speed"))          # m/s
+    temp_avg_24h = safe_float(data.get("temp_avg_24h"))        # ℃
+    rainfall_24h = safe_float(data.get("rainfall_24h"))        # mm
+    wind_speed = safe_float(data.get("wind_speed"))            # m/s
 
     # ======================================================
     # 模型 1：降雪诱发雪崩 I
     # ======================================================
     ari_1 = None
     ari_1_level = "无"
-
-    if not {"snow_depth", "snowfall_24h"} & missing:
-        if snow_depth is not None and snowfall_24h is not None:
-            ari_1 = ((snow_depth / 0.6) + (snowfall_24h / 0.015)) / 2
-            ari_1 = clamp_ari(ari_1)
-            ari_1_level = ari_level_from_value(ari_1)
+    if snow_depth is not None and snowfall_24h is not None:
+        ari_1 = ((snow_depth / 0.6) + (snowfall_24h / 0.015)) / 2
+        ari_1 = clamp_ari(ari_1)
+        ari_1_level = ari_level_from_value(ari_1)
 
     # ======================================================
     # 模型 2：降雪诱发雪崩 II
     # ======================================================
     ari_2 = None
     ari_2_level = "无"
-
-    if not {"snow_depth", "delta_snow_24h"} & missing:
-        if snow_depth is not None and delta_snow_24h is not None:
-            ari_2 = ((snow_depth / 0.6) + (delta_snow_24h / 0.2)) / 2
-            ari_2 = clamp_ari(ari_2)
-            ari_2_level = ari_level_from_value(ari_2)
+    if snow_depth is not None and delta_snow_24h is not None:
+        ari_2 = ((snow_depth / 0.6) + (abs(delta_snow_24h) / 0.2)) / 2
+        ari_2 = clamp_ari(ari_2)
+        ari_2_level = ari_level_from_value(ari_2)
 
     # ======================================================
     # 模型 3：增温融雪诱发雪崩 I
@@ -89,13 +79,13 @@ def compute_ari_for_device(data: Dict[str, Any]) -> Dict[str, Any]:
     ari_3 = "无"
     if temp_avg_24h is not None and delta_snow_24h is not None:
         if temp_avg_24h > 0:
-            if delta_snow_24h > 0.25:
+            if delta_snow_24h <= -0.25:
                 ari_3 = "I"
-            elif delta_snow_24h > 0.2:
+            elif delta_snow_24h <= -0.2:
                 ari_3 = "II"
-            elif delta_snow_24h > 0.15:
+            elif delta_snow_24h <= -0.15:
                 ari_3 = "III"
-            elif delta_snow_24h > 0.1:
+            elif delta_snow_24h <= -0.1:
                 ari_3 = "IV"
 
     # ======================================================
@@ -126,7 +116,8 @@ def compute_ari_for_device(data: Dict[str, Any]) -> Dict[str, Any]:
     # ======================================================
     # 一维雪崩监测阈值模型（表 2）
     # ======================================================
-    one_d_level = "无"
+    one_d_warning_level = "无"
+    threshold_reason = None
 
     if snow_depth is not None and snow_depth > 0.6:
 
@@ -136,7 +127,8 @@ def compute_ari_for_device(data: Dict[str, Any]) -> Dict[str, Any]:
             (delta_snow_24h is not None and delta_snow_24h <= -0.25 and temp_avg_24h is not None and temp_avg_24h > 0) or
             (wind_speed is not None and wind_speed >= 10)
         ):
-            one_d_level = "红"
+            one_d_warning_level = "红"
+            threshold_reason = "one_d_threshold:red"
 
         # 橙色
         elif (
@@ -144,7 +136,8 @@ def compute_ari_for_device(data: Dict[str, Any]) -> Dict[str, Any]:
             (delta_snow_24h is not None and -0.25 < delta_snow_24h <= -0.2 and temp_avg_24h is not None and temp_avg_24h > 0) or
             (wind_speed is not None and 8 <= wind_speed < 10)
         ):
-            one_d_level = "橙"
+            one_d_warning_level = "橙"
+            threshold_reason = "one_d_threshold:orange"
 
         # 黄色
         elif (
@@ -152,7 +145,8 @@ def compute_ari_for_device(data: Dict[str, Any]) -> Dict[str, Any]:
             (delta_snow_24h is not None and -0.2 < delta_snow_24h <= -0.15 and temp_avg_24h is not None and temp_avg_24h > 0) or
             (wind_speed is not None and 6 <= wind_speed < 8)
         ):
-            one_d_level = "黄"
+            one_d_warning_level = "黄"
+            threshold_reason = "one_d_threshold:yellow"
 
         # 蓝色
         elif (
@@ -160,12 +154,14 @@ def compute_ari_for_device(data: Dict[str, Any]) -> Dict[str, Any]:
             (delta_snow_24h is not None and -0.15 < delta_snow_24h <= -0.05 and temp_avg_24h is not None and temp_avg_24h > 0) or
             (wind_speed is not None and 5 <= wind_speed < 6)
         ):
-            one_d_level = "蓝"
+            one_d_warning_level = "蓝"
+            threshold_reason = "one_d_threshold:blue"
 
     # =============================
-    # 输出
+    # 输出（方案 A：字段对齐，不删任何功能）
     # =============================
     return {
+        # 原有 ARI 数值与分级（完全保留）
         "ari_1": ari_1,
         "ari_1_level": ari_1_level,
 
@@ -176,13 +172,20 @@ def compute_ari_for_device(data: Dict[str, Any]) -> Dict[str, Any]:
         "ari_4": ari_4,
         "ari_5": ari_5,
 
-        "one_d_warning_level": one_d_level,
+        # 原有一维模型结果（完全保留）
+        "one_d_warning_level": one_d_warning_level,
+
+        # ✅ 方案 A：对齐 write_result.py
+        "threshold_level": one_d_warning_level,
+        "threshold_reason": threshold_reason,
+
+        # 其他
         "missing_fields": list(missing),
     }
 
 
 def compute_all_ari(fetch_result: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    result = {}
-    for device_id, data in fetch_result.items():
-        result[device_id] = compute_ari_for_device(data)
-    return result
+    return {
+        device_id: compute_ari_for_device(data)
+        for device_id, data in fetch_result.items()
+    }

@@ -1,62 +1,67 @@
 # api/ari_api.py
 from flask import Blueprint, jsonify, request
-from fetch_data import fetch_sensor_data
+
+from fetch_data import (
+    fetch_sensor_data,
+    fetch_ari_last_valid_n
+)
 from compute_ari import compute_all_ari
 
-ari_bp = Blueprint("ari", __name__)  # ❗不带 /api
+ari_bp = Blueprint("ari", __name__)
 
 
 @ari_bp.route("/ari", methods=["GET"])
 def get_ari():
-    print("[API] /ari called")
+    """
+    GET /api/ari
+    GET /api/ari?device_id=xxx
+
+    返回：
+    - 不带参数：所有设备当前 ARI
+    - 带 device_id：该设备 最近7条有效ARI（字符串）
+    """
 
     device_id = request.args.get("device_id")
-    print(f"[API] device_id = {device_id}")
 
-    # 1️⃣ 取数
-    try:
-        sensor_data = fetch_sensor_data()
-        print(f"[API] fetched {len(sensor_data)} devices")
-    except Exception as e:
-        print("[API] fetch_sensor_data ERROR:", repr(e))
-        return jsonify({
-            "success": False,
-            "msg": "fetch_sensor_data failed",
-            "error": str(e)
-        }), 500
+    # =========================
+    # 1️⃣ 计算当前 ARI（你原有逻辑）
+    # =========================
+    sensor_data = fetch_sensor_data()
+    ari_now = compute_all_ari(sensor_data)
 
-    if not sensor_data:
-        return jsonify({
-            "success": False,
-            "msg": "No sensor data",
-            "data": {}
-        }), 200
-
-    # 2️⃣ 计算 ARI
-    try:
-        ari_results = compute_all_ari(sensor_data)
-        print("[API] compute_ari finished")
-    except Exception as e:
-        print("[API] compute_ari ERROR:", repr(e))
-        return jsonify({
-            "success": False,
-            "msg": "compute_ari failed",
-            "error": str(e)
-        }), 500
-
-    # 3️⃣ 设备过滤
+    # =========================
+    # 2️⃣ 单设备：历史 + 当前
+    # =========================
     if device_id:
-        data = ari_results.get(device_id)
-        if data is None:
+        if device_id not in ari_now:
             return jsonify({
                 "success": False,
-                "msg": f"Device {device_id} not found",
-                "data": {}
+                "msg": f"device_id {device_id} not found"
             }), 200
-    else:
-        data = ari_results
 
+        # 最近 7 条【有值】ARI（字符串）
+        history = fetch_ari_last_valid_n(
+            device_id=device_id,
+            n=6
+        )
+
+        # 当前值（统一转字符串，空的给 ""）
+        current = ari_now.get(device_id, {})
+
+        for k in ["ari_1", "ari_2", "ari_3", "ari_4", "ari_5"]:
+            v = current.get(k)
+            history[k].append("" if v is None else str(v))
+
+        return jsonify({
+            "success": True,
+            "device_id": device_id,
+            "data": history
+        }), 200
+
+    # =========================
+    # 3️⃣ 不带参数：当前全量
+    # =========================
     return jsonify({
         "success": True,
-        "data": data
+        "data": ari_now
     }), 200

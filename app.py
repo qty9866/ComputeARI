@@ -1,6 +1,7 @@
 # app.py
 from flask import Flask
 from api.ari_api import ari_bp
+from api.sensor_api import sensor_api
 
 def create_app():
     """
@@ -10,7 +11,7 @@ def create_app():
 
     # 注册 ARI Blueprint
     app.register_blueprint(ari_bp, url_prefix='/api')
-
+    app.register_blueprint(sensor_api, url_prefix="/api")
     return app
 
 if __name__ == "__main__":

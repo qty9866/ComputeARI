@@ -29,7 +29,7 @@ DEVICE_IDS = [
 # 时间策略（分钟）
 # ==============================
 ARI_INTERVAL_MIN = 30        # ARI 计算周期（前端 30 分钟一次）
-DATA_DELAY_GUARD_MIN = 5     # 写入延迟保护（分钟）
+DATA_DELAY_GUARD_MIN = 2     # 写入延迟保护（分钟）
 
 # 最大可回溯可信时间（分钟）
 DATA_MAX_LOOKBACK_MIN = 2880
